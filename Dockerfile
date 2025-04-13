@@ -101,7 +101,7 @@ SHELL ["/bin/bash", "-c"]
 RUN python -m pip install --upgrade pip \
     && curl -LsSf https://astral.sh/uv/install.sh | sh \
     && pip install --no-cache-dir psycopg2-binary \
-    && pip install --no-cache-dir crewai==${CREWAI} crewai-tools==${TOOLS} \
+    && pip install --no-cache-dir crewai crewai-tools \
     && echo "source /add_crew.sh" >> ~/.bashrc \
     && echo "alias v='nvim'" >> ~/.bashrc \
     && echo "alias vim='nvim'" >> ~/.bashrc \
