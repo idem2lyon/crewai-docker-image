@@ -1,77 +1,122 @@
 FROM python:3.11-slim-bookworm
+
+# --- ARGuments pour versions de CrewAI ---
 ARG RELEASE_DATE
 ARG CREWAI
 ARG TOOLS
+
+# --- Variables d'env basiques ---
 ENV DEBIAN_FRONTEND=noninteractive
 ENV DISPLAY=:0
 ENV P=default_crew
+
+# --- Labels et release date ---
 LABEL crewai.version=${CREWAI}
 LABEL crewai-tools.version=${TOOLS}
 LABEL maintainedby="Sammy Ageil"
 LABEL release-date=${RELEASE_DATE}
-RUN apt-get update -y && apt-get install \
-    curl=7.88.1-10+deb12u12 \
-    bash-completion=1:2.11-6 \
-    ripgrep=13.0.0-4+b2 \
-    fzf=0.38.0-1+b1 \
-    xclip=0.13-2 \
-    tree=2.1.0-1 \
-    git=1:2.39.5-0+deb12u2 \
-    make=4.3-4.1 \
-    cmake=3.25.1-1 \
-    build-essential=12.9 \
-    libutf8proc-dev=2.8.0-1 \
-    gettext=0.21-12 \
-    libunibilium-dev=2.1.0-1 \
-    gperf=3.1-1 \
-    luajit=2.1.0~beta3+git20220320+dfsg-4.1 \
-    luarocks=3.8.0+dfsg1-1 \
-    libuv1-dev=1.44.2-1+deb12u1 \
-    libmsgpack-dev=4.0.0-3 \
-    libtermkey-dev=0.22-1 \
-    libvterm-dev=0.1.4-1 \
-    libtermkey-dev=0.22-1 \
-    -y --no-install-recommends \
-    && rm -rf /var/lib/apt/lists/* && \
-    groupadd appgroup && useradd -m -s /usr/bin/bash -G appgroup appuser
+
+# --- Installation paquets de base, Neovim (build deps), etc. ---
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+    curl \
+    bash-completion \
+    ripgrep \
+    fzf \
+    xclip \
+    tree \
+    git \
+    make \
+    cmake \
+    build-essential \
+    libutf8proc-dev \
+    gettext \
+    libunibilium-dev \
+    gperf \
+    luajit \
+    luarocks \
+    libuv1-dev \
+    libmsgpack-dev \
+    libtermkey-dev \
+    libvterm-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# --- Création user et group ---
+RUN groupadd appgroup && \
+    useradd -m -s /usr/bin/bash -G appgroup appuser
+
+# --- Copie des scripts de build/entrypoint ---
 COPY buildneovim.sh /buildneovim.sh
 COPY entrypoint.sh /entrypoint.sh
 COPY shell_venv.sh /shell_venv.sh
+
 RUN chmod +x /entrypoint.sh && chmod +x /shell_venv.sh
-RUN chmod +x /buildneovim.sh && bash /buildneovim.sh
-RUN rm -rf /nvimbuild
+RUN chmod +x /buildneovim.sh && bash /buildneovim.sh && rm -rf /nvimbuild
+
+# --- Copie et exécution script ajout CrewAI ---
 COPY add_crew.sh /add_crew.sh
-RUN apt-get remove --purge --auto-remove \
-    make=4.3-4.1 \
-    build-essential=12.9 \
-    libutf8proc-dev=2.8.0-1 \
-    gettext=0.21-12 \
-    libunibilium-dev=2.1.0-1 \
-    gperf=3.1-1 \
-    luajit=2.1.0~beta3+git20220320+dfsg-4.1 \
-    luarocks=3.8.0+dfsg1-1 \
-    libuv1-dev=1.44.2-1+deb12u1 \
-    libmsgpack-dev=4.0.0-3 \
-    libtermkey-dev=0.22-1 \
-    libvterm-dev=0.1.4-1 \
-    libtermkey-dev=0.22-1 -y && apt-get clean
-SHELL [ "ln", "-sf","/usr/bin/bash","bin/sh" ]
+
+# --- Nettoyage (suppression paquets de build, si tu veux alléger) ---
+RUN apt-get remove --purge --auto-remove -y \
+    make \
+    build-essential \
+    libutf8proc-dev \
+    gettext \
+    libunibilium-dev \
+    gperf \
+    luajit \
+    luarocks \
+    libuv1-dev \
+    libmsgpack-dev \
+    libtermkey-dev \
+    libvterm-dev \
+    && apt-get clean
+
+# --- Changement du shell pour bash ---
+SHELL ["ln", "-sf","/usr/bin/bash","bin/sh"]
+
+# --- Passage user normal ---
 USER appuser
+
+# --- Ajustement shell pour login / interactive ---
 SHELL ["/bin/bash", "--login", "-i", "-c"]
-RUN curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.0/install.sh | bash
-RUN nvm install 20
+
+# --- Installation NVM + Node ---
+RUN curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.0/install.sh | bash \
+    && nvm install 20
+
+# --- Préparation de l'environnement Python ---
 RUN mkdir -p "/home/appuser/.local/bin"
 ENV PATH="/home/appuser/.local/bin:$PATH"
+
 WORKDIR /app/
 RUN chown -R appuser:appgroup "/app/"
+
 SHELL ["/bin/bash", "-c"]
-RUN python -m pip install --upgrade pip  && curl -LsSf https://astral.sh/uv/install.sh | sh \
-    && pip install crewai==${CREWAI} crewai-tools==${TOOLS} --no-cache-dir && \
-    echo "source /add_crew.sh" >> ~/.bashrc && echo "alias v='nvim'" >> ~/.bashrc && \
-    echo "alias vim='nvim'" >> ~/.bashrc && echo "source /shell_venv.sh" >> ~/.bashrc
-RUN git clone https://github.com/LazyVim/starter /home/appuser/.config/nvim && rm -rf /home/appuser/.config/nvim/.git
+
+# --- Installation CrewAI et dépendances Python ---
+# 1) Mise à jour pip
+# 2) Installation psycopg2-binary (optionnel si tu veux la connexion Postgres)
+# 3) Installation CrewAI et CrewAI-tools
+RUN python -m pip install --upgrade pip \
+    && curl -LsSf https://astral.sh/uv/install.sh | sh \
+    && pip install --no-cache-dir psycopg2-binary \
+    && pip install --no-cache-dir crewai==${CREWAI} crewai-tools==${TOOLS} \
+    && echo "source /add_crew.sh" >> ~/.bashrc \
+    && echo "alias v='nvim'" >> ~/.bashrc \
+    && echo "alias vim='nvim'" >> ~/.bashrc \
+    && echo "source /shell_venv.sh" >> ~/.bashrc
+
+# --- Installation LazyVim (d'après le repo) ---
+RUN git clone https://github.com/LazyVim/starter /home/appuser/.config/nvim \
+    && rm -rf /home/appuser/.config/nvim/.git
+
 COPY options.lua /home/appuser/.config/nvim/lua/config/options.lua
 COPY lazy.lua /home/appuser/.config/nvim/lua/config/lazy.lua
 COPY treesitter.lua /home/appuser/.config/nvim/lua/plugins/treesitter.lua
+
+# --- Lancement Neovim pour initialiser LazyVim (timeout pour éviter blocage)
 RUN timeout 200s nvim || true
+
+# --- Point d'entrée ---
 ENTRYPOINT [ "/entrypoint.sh" ]
