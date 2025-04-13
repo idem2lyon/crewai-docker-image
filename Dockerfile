@@ -82,8 +82,15 @@ USER appuser
 SHELL ["/bin/bash", "--login", "-i", "-c"]
 
 # --- Installation NVM + Node ---
+# Place ceci avant ta commande RUN NVM
+ENV NVM_DIR=/home/appuser/.nvm
+# Installe NVM + Node 20 dans la même instruction RUN
 RUN curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.0/install.sh | bash \
-    && nvm install 20
+    && . "$NVM_DIR/nvm.sh" \
+    && nvm install 20 \
+    && nvm alias default 20
+# Ajoute Node au PATH pour les futures instructions RUN et au runtime du conteneur
+ENV PATH="$NVM_DIR/versions/node/v20.0.0/bin:$PATH"
 
 # --- Préparation de l'environnement Python ---
 RUN mkdir -p "/home/appuser/.local/bin"
